@@ -1,0 +1,14 @@
+[project]
+name = "reddit-big-data-ingestion"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "faker>=37.8.0",
+    "jupyter>=1.1.1",
+    "pandas>=2.3.3",
+    "pyarrow>=21.0.0",
+]

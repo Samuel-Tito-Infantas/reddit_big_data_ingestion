@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  postgre_localdb:
+    image: postgres:13.4
+    #restart: always
+    environment:
+    - POSTGRES_USER=myusers
+    - POSTGRES_PASSWORD=passwords
+    - POSTGRES_DB=postgres_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
