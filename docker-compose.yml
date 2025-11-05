@@ -16,8 +16,28 @@ services:
   localstack:
     image: localstack/localstack:latest
     ports:
-      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4566:4566" # The AWS API endpoint
     environment:
       - SERVICES=s3
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
+
+  glue-jupyter:
+    image: public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 # Use the latest image from AWS ECR
+    container_name: glue-jupyter
+    ports:
+      - "8888:8888" # Jupyter Notebook UI
+      - "4040:4040" # Spark UI
+    volumes:
+      - ./glue_jobs:/home/glue_user/workspace/jupyter_workspace
+    environment:
+      # Pass the credentials and endpoint to the container
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - DISABLE_SSL=true # Required for local non-SSL connections
+    # This command starts the Jupyter Notebook server inside the container
+    command: /home/glue_user/jupyter/jupyter_start.sh
+    depends_on:
+      - localstack
+      - postgre_localdb
