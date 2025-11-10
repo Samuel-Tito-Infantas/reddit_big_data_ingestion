@@ -76,3 +76,6 @@ transaction_time TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
 ingestion_time TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
 
 );
+
+                   
+ALTER TABLE transactions ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now();

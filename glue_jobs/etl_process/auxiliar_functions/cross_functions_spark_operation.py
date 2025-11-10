@@ -1,3 +1,4 @@
+from typing import Optional
 from pyspark.sql.functions import col, to_date, month, year, dayofmonth 
 
 from etl_process.auxiliar_functions.spark_objetct_information import SparkEtlParametes
@@ -92,6 +93,90 @@ def create_replace_where_condition(df, partition_cols: list) -> str:
     return replace_where_condition
 
 
+def loop_treatment_data_base_pipeline(object_parameter:SparkEtlParametes, pipe_action:str, mode:str, table_target_name: str | None = None):  
+
+    mode_options, source_data_partition_column, write_mode = extract_parameters(pipe_action)
+    
+    #if mode not in ETL_REFRESH_MODE_OPTIONS:
+    if mode not in mode_options:
+         raise Exception(f"ERROR: input parameter '{mode}' is not in {MODE_OPTIONS}, please check it out!")
+    
+    if mode == "full":
+        print("Start FULL Pipeline")
+        result_tables_names = get_table_name_list(object_parameter)
+
+        for table_name_item in result_tables_names:
+            print(f"processing table: {table_name_item} ...")
+            single_step_pipeline(pipe_action, object_parameter, table_name = table_name_item, write_mode=write_mode, source_data_partition_column=source_data_partition_column)
+
+        print("FULL Pipeline has been end with Sucess!")
+        
+
+    if mode == "partial":
+        if table_target_name:
+            print("Start PARTIAL Pipeline")
+            single_step_pipeline(pipe_action, object_parameter, table_name = table_target_name, write_mode=write_mode, source_data_partition_column=source_data_partition_column)
+            return
+        
+        else:
+            raise Exception(f"ERROR: table_target not informed to full refresh!")
+
+
+def extract_parameters(parameters_obj:str) -> (list, str, str):
+    if parameters_obj in ETL_ACTION_PARAMETERS.keys():
+        dict_parameters = ETL_ACTION_PARAMETERS.get(parameters_obj, None)
+        
+        mode_options = dict_parameters.get("mode_options", None) 
+        source_data_partition_column = dict_parameters.get("source_data_partition_column", None)
+        write_mode = dict_parameters.get("write_mode", None)
+
+        return mode_options, source_data_partition_column, write_mode  
+    
+
+def single_step_pipeline(action, object_parameter:SparkEtlParametes, table_name:str, write_mode:str, source_data_partition_column:str):
+    object_parameter.connector.catalog.clearCache()
+    
+    if action == "insert":
+        print("Action is Append.")
+        table_target_name = costum_query_base(table_name=table_name, time_column=source_data_partition_column, day_interval=1)
+        table_result = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=table_target_name, table_list=None)
+        
+        #save_data()
+        prepare_save_table(object_parameter, table_result, source_data_partition_column, table_name, write_mode=write_mode)
+    
+    elif action == "update":
+        print("Action is Update.")
+        table_target_name = costum_query_base(table_name=table_name, time_column=source_data_partition_column, day_interval=1)
+        table_result = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=table_target_name, table_list=None)
+        
+        #read_data_s3()
+        #compare_data()
+        prepare_save_table(object_parameter, table_result, source_data_partition_column, table_name, write_mode=write_mode)
+    
+    elif action == "refresh":
+        print("Action is Refresh.")
+        table_result = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=table_name, table_list=None)
+        
+        prepare_save_table(object_parameter, table_result, source_data_partition_column, table_name, write_mode=write_mode)
+    
+    else:
+        print("Unknown action.")
+
+def costum_query_base(table_name:str, time_column:str, day_interval:int=1):
+    table_name = f"""(
+               SELECT *  FROM public.{table_name}
+               WHERE {time_column} > (CURRENT_DATE - INTERVAL '{day_interval} day')
+                   AND {time_column} < (CURRENT_DATE + INTERVAL '{day_interval} day')
+               ) AS sql_table
+            """
+    return table_name
+
+def get_table_name_list(object_parameter:SparkEtlParametes):
+    db_table = """(SELECT table_name FROM information_schema.tables WHERE table_schema = 'public') AS talbe_name_list """
+    table_list = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=db_table, table_list=None)
+    result = table_list.select("table_name").rdd.flatMap(lambda x : x).collect()
+    return result
+'''
 def loop_treatment_data_base_pipeline(object_parameter:SparkEtlParametes, pipe_action:str, mode:str, table_target_name:[None, str] = None):  
 
     mode_options, source_data_partition_column, write_mode = extract_parameters(pipe_action)
@@ -136,7 +221,7 @@ def extract_parameters(parameters_obj:str) -> (list, str, str):
         return mode_options, source_data_partition_column, write_mode  
 
 
-'''
+
 from pyspark.sql import SparkSession
 from awsglue.context import GlueContext
 from pyspark.sql.functions import col, to_date, month, year, dayofmonth, lit, concat 
@@ -144,11 +229,7 @@ from pyspark.sql.functions import col, to_date, month, year, dayofmonth, lit, co
 import itertools
 
 
-def get_table_name_list(connector, db_url:str, db_properties:str):
-    db_table = """(SELECT table_name FROM information_schema.tables WHERE table_schema = 'public') AS talbe_name_list """
-    table_list = spark_connection_db_query(connector, db_url, db_table, db_properties)
-    result = table_list.select("table_name").rdd.flatMap(lambda x : x).collect()
-    return result
+
 
 
 def get_table_information(

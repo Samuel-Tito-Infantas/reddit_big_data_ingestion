@@ -19,7 +19,7 @@ S3_PARAMETERS = {
 ETL_ACTION_PARAMETERS = {
     "insert":{
         "mode_options":["full", "partial"],
-        "source_data_partition_column": "last_updated_at",
+        "source_data_partition_column": "created_at",
         "write_mode": "append"
         },
     "update":{
@@ -29,7 +29,7 @@ ETL_ACTION_PARAMETERS = {
         },
     "refresh":{
         "mode_options":["full", "partial"],
-        "source_data_partition_column": "last_updated_at",
+        "source_data_partition_column": "created_at",
         "write_mode": "overwrite"
         },
 }
