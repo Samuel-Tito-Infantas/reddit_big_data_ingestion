@@ -6,6 +6,6 @@ from etl_process.auxiliar_functions.spark_objetct_information import SparkEtlPar
 from etl_process.auxiliar_functions.cross_functions_spark_operation import loop_treatment_data_base_pipeline
 #from etl_process.auxiliar_functions.cross_functions_db import get_db_table_data_looper, get_table_name_list
 
-def full_partial_pipeline_step(object_parameter:SparkEtlParametes, mode:str, table_target_name:[None, str] = None):
-    loop_treatment_data_base_pipeline(object_parameter=object_parameter, mode=mode, table_target_name=table_target_name, pipe_action="refresh")
+def full_partial_insert_pipeline_step(object_parameter:SparkEtlParametes, mode:str, table_target_name:[None, str] = None):
+    loop_treatment_data_base_pipeline(object_parameter=object_parameter, mode=mode, table_target_name=table_target_name, pipe_action="insert")
     
