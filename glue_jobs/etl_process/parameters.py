@@ -25,7 +25,12 @@ ETL_ACTION_PARAMETERS = {
     "update":{
         "mode_options":["full", "partial"],
         "source_data_partition_column": "last_updated_at",
-        "write_mode": "append"
+        "write_mode": "append",
+        "id_column_table_name": {
+            "customers":"customer_id",
+            "transactions":"transaction_id",
+            "accounts":"account_id"
+    }
         },
     "refresh":{
         "mode_options":["full", "partial"],
