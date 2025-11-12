@@ -1,5 +1,6 @@
 from typing import Optional
-from pyspark.sql.functions import col, to_date, month, year, dayofmonth 
+from pyspark.sql.functions import col, to_date, month, year, dayofmonth, lit, concat
+
 
 from etl_process.auxiliar_functions.spark_objetct_information import SparkEtlParametes
 from etl_process.parameters import ETL_ACTION_PARAMETERS
@@ -108,7 +109,7 @@ def loop_treatment_data_base_pipeline(object_parameter:SparkEtlParametes, pipe_a
         for table_name_item in result_tables_names:
             print(f"processing table: {table_name_item} ...")
             single_step_pipeline(pipe_action, object_parameter, table_name = table_name_item, write_mode=write_mode, source_data_partition_column=source_data_partition_column)
-
+        
         print("FULL Pipeline has been end with Sucess!")
         
 
@@ -146,12 +147,17 @@ def single_step_pipeline(action, object_parameter:SparkEtlParametes, table_name:
     
     elif action == "update":
         print("Action is Update.")
+        id_column_name = ETL_ACTION_PARAMETERS.get("update").get("id_column_table_name").get(table_name, None)
+
         table_target_name = costum_query_base(table_name=table_name, time_column=source_data_partition_column, day_interval=1)
         table_result = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=table_target_name, table_list=None)
+        print(f"table_result: {table_result}")
         
-        #read_data_s3()
-        #compare_data()
-        prepare_save_table(object_parameter, table_result, source_data_partition_column, table_name, write_mode=write_mode)
+        final_df  = update_s3_table_process(object_parameter, table_name, id_column_name, source_data_partition_column, write_mode)
+        
+        if final_df:
+            prepare_save_table(object_parameter, final_df, source_data_partition_column, table_name, write_mode=write_mode)
+            print(f"Table {table_name} save with sucess!")
     
     elif action == "refresh":
         print("Action is Refresh.")
@@ -171,11 +177,88 @@ def costum_query_base(table_name:str, time_column:str, day_interval:int=1):
             """
     return table_name
 
+
 def get_table_name_list(object_parameter:SparkEtlParametes):
     db_table = """(SELECT table_name FROM information_schema.tables WHERE table_schema = 'public') AS talbe_name_list """
     table_list = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=db_table, table_list=None)
     result = table_list.select("table_name").rdd.flatMap(lambda x : x).collect()
     return result
+
+def update_s3_table_process(object_parameter:SparkEtlParametes, table_name:str, id_column_name:str, source_data_partition_column:str, write_mode:str):
+    s3_bucket_target = f"{object_parameter.s3_path_root}/{table_name}/"
+
+    #[INSERÇÃO AQUI] -> Reparação dos Metadados (ANTES DA LEITURA)
+    #print(f"Executando MSCK REPAIR TABLE {table_name} para sincronização do catálogo...")
+    #connector.sql(f"MSCK REPAIR TABLE {table_name}").show() 
+    #connector.catalog.clearCache() # Limpa o cache interno do Spark
+    
+    df_parquet = read_data_from_s3(object_parameter, path=s3_bucket_target, list_path=None)
+    
+    table_target_name = costum_query_base(table_name=table_name, time_column=source_data_partition_column, day_interval=1)
+    database_df = get_db_table_data_looper(object_parameter, loop_reading=False, table_name=table_target_name, table_list=None)
+    
+    database_df = create_partition_date(database_df, source_data_partition_column)
+
+    if database_df.count() > 0:
+        print("database_df")
+        list_path = get_parquet_partition_path(object_parameter, df_parquet, database_df, id_column_name, table_name)
+        print(f"list_path: {list_path}")
+        df_final = split_filter_final_df(object_parameter, database_df, list_path, id_column_name)
+        df_final.show()
+        return df_final
+    else:
+        print(f"No data for process on table{table_name}")
+
+
+def get_parquet_partition_path(object_parameter:SparkEtlParametes,df_s3, df_db, id_column_name:str, table_name:str)-> list:
+
+    base_path = f"{object_parameter.s3_path_root}/{table_name}/"
+    
+    partition_df = df_s3.join(df_db.select(id_column_name),
+                              on = id_column_name,
+                              how = "inner"
+                             )
+    path_df = (
+        partition_df
+            .select("year", "month", "day")
+            .distinct()
+            .withColumn(
+                "full_path",
+                    concat(
+                        lit(base_path),
+                        lit("/year="),
+                        partition_df["year"].cast("string"),
+                        lit("/month="),
+                        partition_df["month"].cast("string"),
+                        lit("/day="),
+                        partition_df["day"].cast("string"),
+                    )
+            ).select("full_path")
+        
+    )
+    return [row.full_path for row in path_df.collect()]
+
+
+def split_filter_final_df(object_parameter:SparkEtlParametes, database_df, list_path:list, id_column_name:str):
+    df_s3_partition = read_data_from_s3(object_parameter, path=None, list_path=list_path)
+    df_s3_no_changed = get_s3_no_changed_data(df_s3_partition, database_df, id_column_name) #"customer_id")
+    
+    df_final = df_s3_no_changed.unionByName(database_df.select(*df_s3_no_changed.columns))
+    df_final.show()
+    return df_final
+
+
+def get_s3_no_changed_data(df_s3_partition, df_db, id_column_name:str):
+    df = (
+        df_s3_partition.alias("existing")
+                       .join(
+                           df_db.alias("new"),
+                           on=[id_column_name],
+                           how="left_anti"
+                       )
+    )
+    return df
+
 '''
 def loop_treatment_data_base_pipeline(object_parameter:SparkEtlParametes, pipe_action:str, mode:str, table_target_name:[None, str] = None):  
 
@@ -311,34 +394,5 @@ def retrive_update_data_db(connector, db_url:str, table_name:str, db_properties:
             """
     database_df = spark_connection_db_query(connector, db_url, table_name, db_properties)
     return database_df
-
-
-def get_parquet_partition_path(df_s3, df_db, id_column_name:str, root_path:str, table_name:str)-> list:
-    base_path = f"{root_path}/{table_name}"
-    
-    partition_df = df_s3.join(df_db.select(id_column_name),
-                              on = id_column_name,
-                              how = "inner"
-                             )
-
-    path_df = (
-        partition_df
-            .select("year", "month", "day")
-            .distinct()
-            .withColumn(
-                "full_path",
-                    concat(
-                        lit(base_path),
-                        lit("/year="),
-                        partition_df["year"].cast("string"),
-                        lit("/month="),
-                        partition_df["month"].cast("string"),
-                        lit("/day="),
-                        partition_df["day"].cast("string"),
-                    )
-            ).select("full_path")
-        
-    )
-    return [row.full_path for row in path_df.collect()]
 
 '''
