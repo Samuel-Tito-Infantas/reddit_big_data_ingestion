@@ -1,5 +1,6 @@
 from etl_process.parameters import DB_PARAMETERS, S3_PARAMETERS
 
+
 class SparkEtlParametes:
     def __init__(self, connector):
         self.connector = connector
