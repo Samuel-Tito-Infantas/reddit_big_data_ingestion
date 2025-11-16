@@ -7,8 +7,18 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "black>=25.11.0",
     "faker>=37.8.0",
     "jupyter>=1.1.1",
     "pandas>=2.3.3",
     "pyarrow>=21.0.0",
+    "ruff>=0.14.5",
 ]
+
+[tool.ruff]
+line-length = 86
+
+# Tell ruff to use the standard flake8 rules.
+# "F" = Pyflakes (e.g., unused imports)
+# "E" = Pycodestyle (e.g., style errors)
+select = ["E", "F"]
