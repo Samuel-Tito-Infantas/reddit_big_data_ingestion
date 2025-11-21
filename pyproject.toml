@@ -3,7 +3,9 @@ name = "reddit-big-data-ingestion"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pytest-cov>=7.0.0",
+]
 
 [dependency-groups]
 dev = [
@@ -12,6 +14,8 @@ dev = [
     "jupyter>=1.1.1",
     "pandas>=2.3.3",
     "pyarrow>=21.0.0",
+    "pyspark>=4.0.1",
+    "pytest>=9.0.1",
     "ruff>=0.14.5",
 ]
 
@@ -22,3 +26,14 @@ line-length = 86
 # "F" = Pyflakes (e.g., unused imports)
 # "E" = Pycodestyle (e.g., style errors)
 select = ["E", "F"]
+
+[tool.pytest.ini_options]
+# Tell pytest to ignore these folders during collection
+# Also often good practice to ignore infra-iac/
+norecursedirs = [
+    ".git",
+    ".venv",
+    "postgres_data",
+    "postgres_data111",
+    "infra-iac"
+]

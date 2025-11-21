@@ -1,4 +1,4 @@
-from pyspark.sql.functions import col, to_date, month, year, dayofmonth, lit, concat
+from pyspark.sql.functions import col, to_date, month, year, dayofmonth, lit, concat, expr
 
 
 from etl_process.auxiliar_functions.spark_objetct_information import SparkEtlParametes
@@ -39,8 +39,12 @@ def prepare_save_table(
 
 
 def create_partition_date(df, source_data_partition_column: str):
+    #df = df.withColumn(
+    #    "partition_date", to_date(df[f"{source_data_partition_column}"], "yyyy-MM-dd HH:mm:ss.SSS")
+    #)
     df = df.withColumn(
-        "partition_date", to_date(df[f"{source_data_partition_column}"], "yyyy-MM-dd")
+        "partition_date", 
+        expr(f"try_cast({source_data_partition_column} as date)")
     )
     df = df.withColumn("year", year(df["partition_date"]))
     df = df.withColumn("month", month(df["partition_date"]))
